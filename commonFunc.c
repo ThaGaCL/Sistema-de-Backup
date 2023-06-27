@@ -104,8 +104,8 @@ int separateMessage(mensagem_t* msg, unsigned char* buffer){
     aux=aux<<4;
     aux=~(aux)&buffer[2];
     msg->tipo=aux;
-    strcpy((char*)msg->dados,(char*)&buffer[3]);
-    msg->dados[msg->tamanho]='\0';
+    memcpy(msg->dados,&buffer[3],msg->tamanho);
+    //msg->dados[msg->tamanho]='\0';
 
     //printf("fim---------tam:%d seq:%d tipo:%d------\n",msg->tamanho,msg->sequencia,msg->tipo);
 
@@ -138,7 +138,8 @@ void sendEmpty(int s,unsigned char seq,unsigned char tipo){
     
     mensagem_t m;
     unsigned char buffer[MAXBUFF];
-    setMsgAttr(&m,0,seq, tipo);
+    setMsgAttr(&m,1,seq, tipo);
+    m.dados[0]=seq;
     int size=fillBuffer(&m,buffer);
     if(send(s, buffer, size, 0)<0)
         perror("erro no envio da mensagem:");
@@ -211,12 +212,21 @@ long long timestamp() {
 int protocoloValido(unsigned char* buffer, int buffer_size, unsigned char tipo,unsigned char* seq) {
     if (buffer_size <= 0) 
         return 0; 
-
+    
     mensagem_t m;   
     if(verifyMsg(buffer,buffer_size)) {
         separateMessage(&m, buffer);
         if(*seq==m.sequencia){
+            //printf("recebido msg com seq valida %d e tipo %d, buscando %d\n",m.sequencia,m.tipo,tipo);
             if(m.tipo==tipo){
+                //printf("eeeh\n");
+                if(m.dados[0]==*seq){
+                    //printf("mensagem %d recebida, tipo %d\n",m.dados[0],m.tipo);
+                    return 1;
+                }else
+                    return 0;
+               
+
                 return 1;
             }else if(m.tipo==NACK||m.tipo==ERROR){
                 return -1;
@@ -228,24 +238,26 @@ int protocoloValido(unsigned char* buffer, int buffer_size, unsigned char tipo,u
 }
  
 // retorna -1 se deu timeout, ou quantidade de bytes lidos
-int recvMensagem(int s, unsigned char* buffer, int buffer_size,unsigned char tipo, unsigned char* seq) {
+int recvMensagem(int s, unsigned char tipo, unsigned char* seq) {
     int r;
+    unsigned char buffer[MAXBUFF];
     long long comeco = timestamp();
     struct timeval timeout = { .tv_sec = TIMEOUTMILLIS/1000, .tv_usec = (TIMEOUTMILLIS%1000) * 1000 };
     setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout, sizeof(timeout));
     int bytes_lidos;
     do {
-        bytes_lidos = recv(s, buffer, buffer_size, 0);
+        bytes_lidos = recv(s, buffer, MAXBUFF, 0);
         r=protocoloValido(buffer, bytes_lidos,tipo,seq);
-        if (r) {
-            printf("mensagem %d recebida\n",*seq);
+        if (r==1) {
+            //printf("oiii? %d\n",bytes_lidos);
             return bytes_lidos; 
         }else if(r==-1){
-           *seq=*seq+1;
-           return -1;
+           //*seq=*seq+1;
+            //printf("algo deu errado!\n");
+            return -1;
         }
     } while (timestamp() - comeco <= TIMEOUTMILLIS);
-    *seq=*seq-1;
+    //printf("deu timeout!!\n");
+    //*seq=*seq-1;
     return -1;
 }
-
