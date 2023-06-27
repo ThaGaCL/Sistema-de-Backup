@@ -217,11 +217,8 @@ int protocoloValido(unsigned char* buffer, int buffer_size, unsigned char tipo,u
     if(verifyMsg(buffer,buffer_size)) {
         separateMessage(&m, buffer);
         if(*seq==m.sequencia){
-            //printf("recebido msg com seq valida %d e tipo %d, buscando %d\n",m.sequencia,m.tipo,tipo);
             if(m.tipo==tipo){
-                //printf("eeeh\n");
                 if(m.dados[0]==*seq){
-                    //printf("mensagem %d recebida, tipo %d\n",m.dados[0],m.tipo);
                     return 1;
                 }else
                     return 0;
@@ -249,15 +246,12 @@ int recvMensagem(int s, unsigned char tipo, unsigned char* seq) {
         bytes_lidos = recv(s, buffer, MAXBUFF, 0);
         r=protocoloValido(buffer, bytes_lidos,tipo,seq);
         if (r==1) {
-            //printf("oiii? %d\n",bytes_lidos);
             return bytes_lidos; 
         }else if(r==-1){
            //*seq=*seq+1;
-            //printf("algo deu errado!\n");
             return -1;
         }
     } while (timestamp() - comeco <= TIMEOUTMILLIS);
-    //printf("deu timeout!!\n");
     //*seq=*seq-1;
     return -1;
 }
