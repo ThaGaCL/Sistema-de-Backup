@@ -14,10 +14,10 @@ void receiveBackup(int s,mensagem_t* m,unsigned char* seq,char* current_path){
         strcat (path, "/");
     strcat (path, (char*)m->dados);
 
-    FILE *arq = openFile(path,"w");
+    FILE *arq = openFile(path,"wb");
     if(!arq){
         sendEmpty(s,*seq,NACK);
-        addToSeq(seq,-1);
+        //addToSeq(seq,-1);
         return;
     }
 
@@ -36,9 +36,10 @@ void receiveBackup(int s,mensagem_t* m,unsigned char* seq,char* current_path){
 
         if(verifyMsg(buffer,size)){
             separateMessage(&m2, buffer);
+            if(m2.tipo!=ACK&&m2.tipo!=NACK){
             if(*seq==m2.sequencia){
                 printf("mensagem %d recebida! tipo(%d) tam(%d)\n",*seq,m2.tipo,m2.tamanho);
-                addToSeq(seq,1);
+                //addToSeq(seq,1);
                 switch(m2.tipo){
 
                     case DATA:
@@ -47,7 +48,7 @@ void receiveBackup(int s,mensagem_t* m,unsigned char* seq,char* current_path){
                             addToSeq(seq,1);
                         }else{
                             sendEmpty(s,*seq,NACK);
-                            addToSeq(seq,1);
+                            //addToSeq(seq,1);
                         }
                     break;
 
@@ -58,22 +59,24 @@ void receiveBackup(int s,mensagem_t* m,unsigned char* seq,char* current_path){
                         addToSeq(seq,1);
                     break;
                     default:
-
+                        printf("why????\n");
                         sendEmpty(s,*seq,NACK);
-                        addToSeq(seq,1);
+                        //addToSeq(seq,1);
                     break;
 
                 }
 
-            }else if(getSeqAdding(seq,-2)==m2.sequencia&&(m2.tipo==BACKUP||m2.tipo==BACKUPN)){
-                sendEmpty(s,getSeqAdding(seq,-1),OK);
-            }else if(getSeqAdding(seq,-2)==m2.sequencia){
-                sendEmpty(s,getSeqAdding(seq,-1),ACK);
-            }                   
+            }else if(getSeqAdding(seq,-1)==m2.sequencia){
+                if((m2.tipo==BACKUP||m2.tipo==BACKUPN))
+                    sendEmpty(s,getSeqAdding(seq,-1),OK);
+                else
+                    sendEmpty(s,getSeqAdding(seq,-1),ACK);
+            }   
+            }               
 
         }
     }while(!endof); 
-
+    printf("saiiiuuuuuu!\n");
     fclose(arq);
 
 
