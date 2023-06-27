@@ -34,7 +34,7 @@ int main(){
     menu();
     do{    
         printf("%s%s>%s ",ANSI_COLOR_CYAN,current_path,ANSI_COLOR_RESET);
-        fgets(entry, MAXLINE+1, stdin);
+        fgets(entry, MAXLINE+1, stdin);     //recebe entrada
         replaceFirst(entry,'\n','\0');
         firstWord(&value,entry);
         if(strcmp(value,"ls")==0){
