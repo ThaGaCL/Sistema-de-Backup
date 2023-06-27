@@ -111,7 +111,7 @@ void backup(int s,char* filename,char* current_path,unsigned char* seq){
     if(strcmp(current_path,"./")!=0)
         strcat (path, "/");
     strcat (path, filename);
-    FILE *arq = openFile(path,"r");
+    FILE *arq = openFile(path,"rb");
     if(!arq){
         perror("Erro na abertura do arquivo");
         return;
@@ -122,40 +122,42 @@ void backup(int s,char* filename,char* current_path,unsigned char* seq){
     unsigned char buffer[MAXBUFF];
     memset(buffer, 0, MAXBUFF);
 
-    setMsgAttr(&m,strlen(filename),*seq, BACKUP);
-    strcpy((char*)m.dados, filename);
+    setMsgAttr(&m,strlen(filename)+1,*seq, BACKUP);
+    memcpy((char*)m.dados, filename,strlen(filename));
+    m.dados[strlen(filename)]='\0';
     size=fillBuffer(&m,buffer);
     do{
-
         if(send(s, buffer,size, 0)<0)
             perror("erro no envio da mensagem:");
         
         printf("mensagem %d enviada! tipo(%d) tam(%d)\n",*seq,m.tipo,m.tamanho);
-        addToSeq(seq,1);
-    }while(recvMensagem(s, buffer,MAXBUFF,OK,seq)<0);
+        //addToSeq(seq,1);
+    }while(recvMensagem(s,OK,seq)<0);
     addToSeq(seq,1);
 
     while(! feof(arq)){
-        size=fread (m.dados, sizeof(unsigned char), 63, arq);
+        size=fread (m.dados, sizeof(unsigned char), MAXDATA, arq);
+        printf("teste\n");
         setMsgAttr(&m,size,*seq, DATA);
         size=fillBuffer(&m,buffer);
         do{
-
+            
+            
             if(send(s, buffer, size, 0)<0)
                 perror("erro no envio da mensagem:");
        
             printf("mensagem %d enviada! tipo(%d) tam(%d)\n",*seq,m.tipo,m.tamanho);
-            addToSeq(seq,1);
-        }while(recvMensagem(s, buffer,MAXBUFF,ACK,seq)<0);
+            //addToSeq(seq,1);
+        }while(recvMensagem(s, ACK,seq)<0);
         addToSeq(seq,1);
     }
 
     do{
 
         sendEmpty(s,*seq,ENDOF);
-        addToSeq(seq,1);
+        //addToSeq(seq,1);
 
-    }while(recvMensagem(s, buffer,MAXBUFF,ACK,seq)<0);
+    }while(recvMensagem(s,ACK,seq)<0);
     addToSeq(seq,1);
 
 }
@@ -207,6 +209,8 @@ void firstWord(char** word,char* s){
 
     strcpy(s,&s[div+i]);
 }
+
+
 
 
 
