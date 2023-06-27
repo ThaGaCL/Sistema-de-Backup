@@ -29,7 +29,7 @@ typedef struct mensagem_t{
     unsigned char tamanho;
     unsigned char sequencia;
     unsigned char tipo;
-    unsigned char dados[MAXDATA+1];
+    unsigned char dados[MAXDATA];
 
 }mensagem_t;
 
@@ -53,5 +53,4 @@ int verifyMsg(unsigned char* buffer,int size);
 
 void sendEmpty(int s,unsigned char seq,unsigned char tipo);
 
-int recvMensagem(int s,unsigned char* buffer, int buffer_size,unsigned char tipo,unsigned char* seq);
-
+int recvMensagem(int s,unsigned char tipo,unsigned char* seq);
