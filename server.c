@@ -11,12 +11,13 @@
 #include <dirent.h>
 #include"commonFunc.h"
 #include"serFunc.h"
+#include"cliFunc.h"
 
 
 int main(){
 
     int s = create_socket("lo");//eno1
-    char current_path[MAXPATH]="./";
+    char current_path[MAXPATH]=SERPATH;
     int ended=0;
     int size;
     unsigned char seq=0;
@@ -24,45 +25,44 @@ int main(){
     unsigned char buffer[MAXBUFF];
     memset(buffer,'0', MAXBUFF);
 
+    printf("==================Server Iniciado==================\n");
+    printf("%s[%s]%s\n",ANSI_COLOR_CYAN,current_path,ANSI_COLOR_RESET);
     do{
-        size=recv(s,(void*) buffer, MAXBUFF, 0);
-        if(size<=0)
-            perror("erro no recebimento:");
-        else if(verifyMsg(buffer,size)){
-            
+        
+        size=recv(s,buffer, MAXBUFF, 0);
+        if(size>0&&verifyMsg(buffer,size)){
             separateMessage(&m, buffer);
             if(m.sequencia==seq){
-                addToSeq(&seq,1);
                 switch(m.tipo){
 
                     case BACKUP:
                     case BACKUPN:  
                         receiveBackup(s,&m,&seq,current_path);
+                        printf("%s[%s]%s\n",ANSI_COLOR_CYAN,current_path,ANSI_COLOR_RESET);
                     break;
 
                     case RECOVER:
-                    case RECOVERN:   
-
+                    case RECOVERN:
+                        sendEmpty(s,seq,ACK);
+                        addToSeq(&seq,1);   
+                        backup(s,(char*)m.dados,current_path,&seq);
+                        printf("%s[%s]%s\n",ANSI_COLOR_CYAN,current_path,ANSI_COLOR_RESET);
                     break;
 
                     case CHOOSE_SER_DIR:   
-
+                        custom_cd((char*)m.dados,current_path,SERPATH);
+                        sendEmpty(s,seq,ACK);
+                        addToSeq(&seq,1);
+                        printf("%s[%s]%s\n",ANSI_COLOR_CYAN,current_path,ANSI_COLOR_RESET);
                     break;
 
                     case VERIFY:   
-
-                    break;
-
-                    case FILENAME_RECOVER:   
-
-                    break;
-
-                    case MD5:   
-
+                        verifyFileServer(s,(char*)m.dados,current_path,&seq);
+                        printf("%s[%s]%s\n",ANSI_COLOR_CYAN,current_path,ANSI_COLOR_RESET);
                     break;
                     case ENDOF:
                     case ENDGF:
-                        sendEmpty(s,seq,ACK);
+                        sendEmpty(s,seq-1,ACK);
                     break;
                     default:   
 
@@ -70,16 +70,22 @@ int main(){
 
                 }
 
+                
+            }else if(m.sequencia==getSeqAdding(&seq,-1)){
+                if(m.tipo!=ACK&&m.tipo!=NACK&&m.tipo!=VERIFY)
+                    sendEmpty(s,seq-1,ACK);
+                else if(m.tipo==VERIFY){
+                    addToSeq(&seq,-1);
+                    verifyFileServer(s,(char*)m.dados,current_path,&seq);
+                    printf("%s[%s]%s\n",ANSI_COLOR_CYAN,current_path,ANSI_COLOR_RESET);
 
-            }else{
-                sendEmpty(s,seq,NACK);
+                }else if(m.tipo==ACK){
+                    sendEmpty(s,seq,END);
+                }
             }
-        }else if(m.sequencia==getSeqAdding(&seq,-2)){
-            sendEmpty(s,seq-1,ACK);
         }
     }while(!ended);
 
     return 0;
 
 }
-
