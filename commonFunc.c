@@ -12,6 +12,7 @@
 #include<sys/time.h>
 #include <arpa/inet.h>
 #include"commonFunc.h"
+#include  <openssl/md5.h>
 
 int create_socket(char *interface_rede){
     int s;
@@ -105,7 +106,6 @@ int separateMessage(mensagem_t* msg, unsigned char* buffer){
     aux=~(aux)&buffer[2];
     msg->tipo=aux;
     memcpy(msg->dados,&buffer[3],msg->tamanho);
-    //msg->dados[msg->tamanho]='\0';
 
     //printf("fim---------tam:%d seq:%d tipo:%d------\n",msg->tamanho,msg->sequencia,msg->tipo);
 
@@ -143,7 +143,7 @@ void sendEmpty(int s,unsigned char seq,unsigned char tipo){
     int size=fillBuffer(&m,buffer);
     if(send(s, buffer, size, 0)<0)
         perror("erro no envio da mensagem:");
-    printf("mensagem %d enviada tipo(%d)\n",seq,tipo);
+    //printf("mensagem %d enviada tipo(%d)\n",seq,tipo);
 
 }
 
@@ -203,13 +203,62 @@ unsigned char getSeqAdding(unsigned char* seq,int a){
 
 }
 
+int getFileSize(FILE* f){
+    fseek(f, 0, SEEK_END);
+    int size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    return size;
+}
+
+int fileExists(char* filename, char* dirname){
+    char path[MAXPATH];
+    strcpy(path, dirname);
+
+    strcat (path, "/");
+    strcat (path, filename);
+    FILE *fileClient;
+    fileClient = fopen(path, "rb");
+    if(fileClient == NULL){
+        return 0;
+    }
+    fclose(fileClient);
+    return 1;
+}
+
+unsigned char* getMD5(FILE* fileClient) {
+    int size = getFileSize(fileClient);
+    char* buffer = (char*)malloc(size);
+    fread(buffer, size, 1, fileClient);
+
+    const unsigned char* data = (const unsigned char*)buffer;
+
+    MD5_CTX mdContext;
+    MD5_Init(&mdContext);
+    MD5_Update(&mdContext, data, size);
+
+    unsigned char* result = (unsigned char*)malloc(MD5_DIGEST_LENGTH);
+    MD5_Final(result, &mdContext);
+
+    return result;
+}
+
+// Compara dois MD5
+int compareMD5(unsigned char* md5_1, unsigned char* md5_2){
+    for(int i = 0; i < MD5_DIGEST_LENGTH; i++){
+        if(md5_1[i] != md5_2[i]){
+            return 0;
+        }
+    }
+    return 1;
+}
+
 long long timestamp() {
     struct timeval tp;
     gettimeofday(&tp, NULL);
     return tp.tv_sec*1000 + tp.tv_usec/1000;
 }
  
-int protocoloValido(unsigned char* buffer, int buffer_size, unsigned char tipo,unsigned char* seq) {
+int protocoloValido(int s,unsigned char* buffer, int buffer_size, unsigned char tipo,unsigned char* seq) {
     if (buffer_size <= 0) 
         return 0; 
     
@@ -228,7 +277,42 @@ int protocoloValido(unsigned char* buffer, int buffer_size, unsigned char tipo,u
             }else if(m.tipo==NACK||m.tipo==ERROR){
                 return -1;
             }
+        }else if(m.sequencia==getSeqAdding(seq,-1)&&(m.tipo==RECOVER||m.tipo==RECOVERN)){
+            sendEmpty(s,*seq-1,ACK);
+            return -1;
         }    
+    }
+
+    return 0;
+}
+
+int protocoloValidoMD5(int s,unsigned char* buffer, int buffer_size, unsigned char* seq,char* path) {
+    if (buffer_size <= 0) 
+        return 0; 
+    
+    mensagem_t m;  
+    unsigned char *result,result2[MD5_DIGEST_LENGTH]; 
+    if(verifyMsg(buffer,buffer_size)) {
+        separateMessage(&m, buffer);
+        if(*seq==m.sequencia){
+            if(m.tipo==MMD5){
+
+                FILE *fileCli = openFile(path,"rb");
+                if(!fileCli)
+                    return -1;
+                result = getMD5(fileCli);
+                memcpy(result2,m.dados,MD5_DIGEST_LENGTH);
+                if(compareMD5(result, result2)){
+                    printf("Arquivos iguais\n");
+                }else{
+                    printf("Arquivos diferentes\n");
+                }
+                return 1;
+            }else if(m.tipo==ERROR){
+                return 1;
+
+            }
+        }   
     }
 
     return 0;
@@ -244,14 +328,31 @@ int recvMensagem(int s, unsigned char tipo, unsigned char* seq) {
     int bytes_lidos;
     do {
         bytes_lidos = recv(s, buffer, MAXBUFF, 0);
-        r=protocoloValido(buffer, bytes_lidos,tipo,seq);
+        r=protocoloValido(s,buffer, bytes_lidos,tipo,seq);
         if (r==1) {
             return bytes_lidos; 
         }else if(r==-1){
-           //*seq=*seq+1;
             return -1;
         }
     } while (timestamp() - comeco <= TIMEOUTMILLIS);
-    //*seq=*seq-1;
+    return -1;
+}
+
+int recvMD5Mensagem(int s, unsigned char* seq,char* path) {
+    int r;
+    unsigned char buffer[MAXBUFF];
+    long long comeco = timestamp();
+    struct timeval timeout = { .tv_sec = TIMEOUTMILLIS/1000, .tv_usec = (TIMEOUTMILLIS%1000) * 1000 };
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout, sizeof(timeout));
+    int bytes_lidos;
+    do {
+        bytes_lidos = recv(s, buffer, MAXBUFF, 0);
+        r=protocoloValidoMD5(s,buffer, bytes_lidos,seq,path);
+        if (r==1) {
+            return bytes_lidos; 
+        }else if(r==-1){
+            return -1;
+        }
+    } while (timestamp() - comeco <= TIMEOUTMILLIS);
     return -1;
 }
